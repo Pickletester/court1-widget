@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Court 1 Widget (v18 Number Outline)</title>
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <style>
+    html, body {
+      margin: 0; padding: 0;
+      width: 100%; height: 100%;
+      overflow: hidden;
+    }
+    .graphic-bar {
+      position: fixed; left: 0; bottom: 0;
+      width: 100vw; height: 70px;
+      background: linear-gradient(to right, #192544, #22335d);
+      display: flex; font-family: Arial, sans-serif;
+      box-sizing: border-box;
+    }
+    .graphic-bar .section {
+      flex: 1;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      position: relative; overflow: hidden;
+    }
+    .graphic-bar .section:not(#court-number)::before {
+      content: ""; position: absolute;
+      top: 5px; bottom: 5px; left: 8px; right: 8px;
+      background: rgba(0,0,0,0.4); border-radius: 3px;
+    }
+    .graphic-bar .section .label {
+      color: #fff; font-weight: bold;
+      text-transform: uppercase; font-size: 12px;
+      z-index: 1; margin-bottom: 2px;
+    }
+    #current-event .label { color: #0f0; }
+    #next-event   .label { color: #ffeb3b; }
+    .graphic-bar .section .value {
+      color: #fff; font-size: 14px;
+      font-weight: bold; z-index: 1;
+      text-align: center;
+    }
+
+    /* COURT 1 styling */
+    #court-number {
+      display: flex; flex-direction: row;
+      align-items: center; justify-content: center;
+    }
+    #court-number .label {
+      font-size:  24px; margin-right: 16px;
+    }
+    #court-number .value {
+      font-size:  32px; font-weight: 900;
+      text-shadow: 1px 1px 2px rgba(0,0,0,0.6);
+      background: transparent;
+      padding: 4px 8px; border: 2px solid #fff;
+      border-radius: 0;
+    }
+
+    #countdown .value {
+      font-size: 24px;
+    }
+  </style>
+</head>
+<body>
+  <div class="graphic-bar">
+    <div id="court-number" class="section">
+      <div class="label">COURT</div>
+      <div class="value"> 1</div>
+    </div>
+    <div id="current-event" class="section">
+      <div class="label">In Progress</div>
+      <div class="value">Loading...</div>
+    </div>
+    <div id="countdown" class="section">
+      <div class="label">Time Left</div>
+      <div class="value">--</div>
+    </div>
+    <div id="next-event" class="section">
+      <div class="label">Upcoming</div>
+      <div class="value">Loading next...</div>
+    </div>
+    <div id="current-time" class="section">
+      <div class="label">Current Time</div>
+      <div class="value">--:--</div>
+    </div>
+  </div>
+  <script>
+    function updateCurrentTime() {
+      const now = new Date();
+      $('#current-time .value').text(
+        now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })
+      );
+    }
+    function scheduleCurrentTimeUpdate() {
+      updateCurrentTime();
+      const now = new Date();
+      const delay = (60 - now.getSeconds()) * 1000 - now.getMilliseconds();
+      setTimeout(scheduleCurrentTimeUpdate, delay);
+    }
+    scheduleCurrentTimeUpdate();
+
+    function formatTime(d) {
+      return new Date(d).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+    }
+
+    function startCountdown(target) {
+      clearTimeout(window.countdownTimeout);
+      function tick() {
+        const now = new Date();
+        const diff = target - now.getTime();
+        const el = $('#countdown .value');
+        if (diff > 0) {
+          const m = Math.floor(diff/60000);
+          const s = Math.floor((diff%60000)/1000);
+          if (diff > 60000) el.text(m+'m').css('color', m<=5?'#ff4d4d':'#fff');
+          else el.text(s+'s').css('color','#ff4d4d');
+          const ms = 1000 - now.getMilliseconds();
+          window.countdownTimeout = setTimeout(tick, ms);
+        } else {
+          el.text('Time Expired').css('color','#ff4d4d');
+          clearTimeout(window.countdownTimeout);
+          setTimeout(() => {
+            if (window.nextEventTime) startCountdown(window.nextEventTime);
+            else el.text('No Event').css('color','#fff');
+          }, 5000);
+        }
+      }
+      tick();
+    }
+
+    function fetchData() {
+      window.nextEventTime = null;
+      const auth = 'Basic ' + btoa('Org_12674:12674_185afda7-7b4f-4b0a-8ba0-a79eac78811d');
+      const today = new Date().toISOString().split('T')[0];
+      const evUrl = `https://api.courtreserve.com/api/v1/eventcalendar/eventlist?orgMemberId=12674&startDate=${today}T00:00:00&endDate=${today}T23:59:59`;
+      const resUrl = `https://api.courtreserve.com/api/v1/reservationreport/listactive?reservationsFromDate=${today}&reservationsToDate=${today}`;
+      $.when(
+        $.ajax({ url: evUrl, headers: { Authorization: auth } }),
+        $.ajax({ url: resUrl, headers: { Authorization: auth } })
+      ).done((e, r) => {
+        const events = e[0].Data.map(x => ({ name: x.EventName, start: new Date(x.StartDateTime), end: new Date(x.EndDateTime) }));
+        const resv = r[0].Data.filter(x => x.Courts.includes('Court #1')).map(x => ({
+          name: x.Players.map(p => p.FirstName+' '+p.LastName).join(', ') || x.ReservationTypeName,
+          start: new Date(x.StartTime),
+          end: new Date(x.EndTime)
+        }));
+        const all = events.concat(resv).sort((a, b) => a.start - b.start);
+        const now = new Date();
+        let cur = null, nxt = null;
+        all.forEach(item => {
+          if (!cur && now >= item.start && now <= item.end) cur = item;
+          if (!nxt && now < item.start) nxt = item;
+        });
+        window.nextEventTime = nxt ? nxt.start.getTime() : null;
+        if (cur) {
+          $('#current-event .value').html(`${cur.name}<div style="font-size:10px;color:#ddd">${formatTime(cur.start)} - ${formatTime(cur.end)}</div>`);
+          startCountdown(cur.end.getTime());
+        } else $('#current-event .value').text('No current event');
+        if (nxt) $('#next-event .value').html(`${nxt.name}<div style="font-size:10px;color:#ddd">${formatTime(nxt.start)} - ${formatTime(nxt.end)}</div>`);
+        else $('#next-event .value').text('No upcoming event');
+      }).fail(() => $('#current-event .value').text('Error loading data'));
+    }
+
+    fetchData();
+    setInterval(fetchData, 30000);
+  </script>
+</body>
+</html>
