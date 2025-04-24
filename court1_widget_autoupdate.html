@@ -123,7 +123,7 @@
           setTimeout(() => {
             if (window.nextEventTime) startCountdown(window.nextEventTime);
             else el.text('No Event').css('color','#fff');
-          }, 5000);
+          }, 300000);
         }
       }
       tick();
@@ -152,14 +152,30 @@
           if (!cur && now >= item.start && now <= item.end) cur = item;
           if (!nxt && now < item.start) nxt = item;
         });
-        window.nextEventTime = nxt ? nxt.start.getTime() : null;
-        if (cur) {
-          $('#current-event .value').html(`${cur.name}<div style="font-size:10px;color:#ddd">${formatTime(cur.start)} - ${formatTime(cur.end)}</div>`);
-          startCountdown(cur.end.getTime());
-        } else $('#current-event .value').text('No current event');
-        if (nxt) $('#next-event .value').html(`${nxt.name}<div style="font-size:10px;color:#ddd">${formatTime(nxt.start)} - ${formatTime(nxt.end)}</div>`);
-        else $('#next-event .value').text('No upcoming event');
-      }).fail(() => $('#current-event .value').text('Error loading data'));
+        
+      window.nextEventTime = nxt ? nxt.start.getTime() : null;
+      if (cur) {
+        $('#current-event .value').html(
+          `${cur.name}<div style="font-size:10px;color:#ddd">${formatTime(cur.start)} - ${formatTime(cur.end)}</div>`
+        );
+        $('#countdown .label').text('Time Left');
+        startCountdown(cur.end.getTime());
+      } else {
+        $('#current-event .value').text('No current event');
+        if (nxt) {
+          $('#countdown .label').text('Time Until');
+          startCountdown(nxt.start.getTime());
+        }
+      }
+      if (nxt) {
+        $('#next-event .value').html(
+          `${nxt.name}<div style="font-size:10px;color:#ddd">${formatTime(nxt.start)} - ${formatTime(nxt.end)}</div>`
+        );
+      } else {
+        $('#next-event .value').text('No upcoming event');
+      }
+
+    }).fail(() => $('#current-event .value').text('Error loading data'));
     }
 
     fetchData();
